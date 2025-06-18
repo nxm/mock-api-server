@@ -1,4 +1,6 @@
-project_name: myapp
+version: 2
+
+project_name: mock-api-server
 
 builds:
   - env:
@@ -19,8 +21,3 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-
-release:
-  github:
-    owner: nxm
-    name: mock-api-server
