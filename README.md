@@ -2,6 +2,10 @@
 
 ![image](https://github.com/user-attachments/assets/4fb9d4e6-1610-43d6-93e3-eadd89ba584e)
 
+## Demo
+
+Try the live demo at: https://mock-api.jakub.app/admin
+
 ## Use
 
 ```
