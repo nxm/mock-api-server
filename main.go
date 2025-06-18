@@ -7,6 +7,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -91,11 +93,25 @@ func main() {
 
 	server := NewMockServer()
 
+	http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		endpoints := server.ListEndpoints()
+		adminPage(endpoints).Render(r.Context(), w)
+	})
+
 	http.HandleFunc("/admin/mocks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			endpoints := server.ListEndpoints()
+			if strings.Contains(r.Header.Get("Accept"), "text/html") || r.Header.Get("HX-Request") == "true" {
+				endpoints := server.ListEndpoints()
+				endpointsList(endpoints).Render(r.Context(), w)
+				return
+			}
 
+			endpoints := server.ListEndpoints()
 			log.Info().Interface("endpoints", endpoints).Msg("Endpoints")
 			w.Header().Set("Content-Type", "application/json")
 			err := json.NewEncoder(w).Encode(endpoints)
@@ -105,6 +121,70 @@ func main() {
 			}
 
 		case http.MethodPost:
+			if r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" || r.Header.Get("HX-Request") == "true" {
+				err := r.ParseForm()
+				if err != nil {
+					http.Error(w, "Failed to parse form", http.StatusBadRequest)
+					return
+				}
+
+				endpoint := MockEndpoint{
+					Path:   r.FormValue("path"),
+					Method: r.FormValue("method"),
+				}
+
+				if endpoint.Path == "" {
+					http.Error(w, "Path is required", http.StatusBadRequest)
+					return
+				}
+
+				if endpoint.Method == "" {
+					endpoint.Method = http.MethodGet
+				}
+
+				if statusStr := r.FormValue("status_code"); statusStr != "" {
+					if status, err := strconv.Atoi(statusStr); err == nil {
+						endpoint.StatusCode = status
+					}
+				}
+				if endpoint.StatusCode == 0 {
+					endpoint.StatusCode = http.StatusOK
+				}
+
+				if delayStr := r.FormValue("delay_ms"); delayStr != "" {
+					if delay, err := strconv.Atoi(delayStr); err == nil {
+						endpoint.Delay = delay
+					}
+				}
+
+				if headersStr := r.FormValue("response_headers"); headersStr != "" {
+					var headers map[string]string
+					if err := json.Unmarshal([]byte(headersStr), &headers); err == nil {
+						endpoint.ResponseHeaders = headers
+					}
+				}
+
+				if bodyStr := r.FormValue("response_body"); bodyStr != "" {
+					var jsonBody interface{}
+					if err := json.Unmarshal([]byte(bodyStr), &jsonBody); err == nil {
+						endpoint.ResponseBody = jsonBody
+					} else {
+						endpoint.ResponseBody = bodyStr
+					}
+				}
+
+				if endpoint.Delay > 2000 {
+					endpoint.Delay = 2000
+				}
+
+				server.AddEndpoint(&endpoint)
+				log.Info().Msgf("Mock endpoint added via web UI: [%s] %s", endpoint.Method, endpoint.Path)
+
+				endpoints := server.ListEndpoints()
+				endpointsList(endpoints).Render(r.Context(), w)
+				return
+			}
+
 			var endpoint MockEndpoint
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -152,6 +232,13 @@ func main() {
 
 			if server.DeleteEndpoint(path, method) {
 				log.Info().Msgf("Mock endpoint deleted: %s", path)
+
+				if r.Header.Get("HX-Request") == "true" {
+					endpoints := server.ListEndpoints()
+					endpointsList(endpoints).Render(r.Context(), w)
+					return
+				}
+
 				w.WriteHeader(http.StatusOK)
 				err := json.NewEncoder(w).Encode(map[string]string{
 					"message": fmt.Sprintf("Mock endpoint deleted: %s %s", method, path),
@@ -170,7 +257,7 @@ func main() {
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/admin/mocks" {
+		if r.URL.Path == "/admin/mocks" || r.URL.Path == "/admin" {
 			return
 		}
 
@@ -248,8 +335,11 @@ func main() {
 		server.AddEndpoint(&endpoint)
 	}
 
-	fmt.Println("Mock API Server starting on :8080")
-	fmt.Println("\nAdmin endpoints:")
+	addr := fmt.Sprintf("%s:%d", *host, *port)
+	fmt.Printf("Mock API Server starting on %s\n", addr)
+	fmt.Println("\nWeb interface:")
+	fmt.Printf("  http://%s/admin - Admin web interface\n", addr)
+	fmt.Println("\nAdmin API endpoints:")
 	fmt.Println("  GET    /admin/mocks - List all mock endpoints")
 	fmt.Println("  POST   /admin/mocks - Create a new mock endpoint")
 	fmt.Println("  DELETE /admin/mocks?path=/path&method=GET - Delete a mock endpoint")
@@ -257,7 +347,5 @@ func main() {
 	for _, endpoint := range exampleEndpoints {
 		fmt.Printf("  %s %s (delay: %dms)\n", endpoint.Method, endpoint.Path, endpoint.Delay)
 	}
-
-	addr := fmt.Sprintf("%s:%d", *host, *port)
 	log.Fatal().Err(http.ListenAndServe(addr, nil))
 }

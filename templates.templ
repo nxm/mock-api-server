@@ -1,0 +1,218 @@
+package main
+
+import "fmt"
+
+templ layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+			<script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
+			<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"/>
+		</head>
+		<body class="bg-gray-100 min-h-screen">
+			<div class="container mx-auto px-4 py-8">
+				{ children... }
+			</div>
+		</body>
+	</html>
+}
+
+templ adminPage(endpoints []MockEndpoint) {
+	@layout("Mock API Server - Admin") {
+		<div class="max-w-6xl mx-auto" x-data="{ showForm: false }">
+			<h1 class="text-3xl font-bold text-gray-800 mb-8">Mock API Server Admin</h1>
+			
+			<div class="mb-6">
+				<button 
+					@click="showForm = !showForm" 
+					class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-medium"
+				>
+					<span x-show="!showForm">+ Add New Endpoint</span>
+					<span x-show="showForm">Cancel</span>
+				</button>
+			</div>
+
+			<div x-show="showForm" x-transition class="bg-white rounded-lg shadow-md p-6 mb-6">
+				@endpointForm()
+			</div>
+
+			<div class="bg-white rounded-lg shadow-md">
+				<div class="p-6 border-b">
+					<h2 class="text-xl font-semibold text-gray-800">Active Endpoints</h2>
+				</div>
+				<div id="endpoints-list">
+					@endpointsList(endpoints)
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ endpointForm() {
+	<form hx-post="/admin/mocks" hx-target="#endpoints-list" hx-swap="innerHTML" class="space-y-4">
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Path</label>
+				<input 
+					type="text" 
+					name="path" 
+					placeholder="/api/example" 
+					required
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+				/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Method</label>
+				<select 
+					name="method" 
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+				>
+					<option value="GET">GET</option>
+					<option value="POST">POST</option>
+					<option value="PUT">PUT</option>
+					<option value="DELETE">DELETE</option>
+					<option value="PATCH">PATCH</option>
+				</select>
+			</div>
+		</div>
+		
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Status Code</label>
+				<input 
+					type="number" 
+					name="status_code" 
+					value="200" 
+					min="100" 
+					max="599"
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+				/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Delay (ms)</label>
+				<input 
+					type="number" 
+					name="delay_ms" 
+					value="0" 
+					min="0" 
+					max="2000"
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+				/>
+			</div>
+		</div>
+
+		<div>
+			<label class="block text-sm font-medium text-gray-700 mb-2">Response Headers (JSON)</label>
+			<textarea 
+				name="response_headers" 
+				placeholder='{"Content-Type": "application/json"}'
+				rows="2"
+				class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+			></textarea>
+		</div>
+
+		<div>
+			<label class="block text-sm font-medium text-gray-700 mb-2">Response Body (JSON or plain text)</label>
+			<textarea 
+				name="response_body" 
+				placeholder='{"message": "Hello World"}'
+				rows="4"
+				class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+			></textarea>
+		</div>
+
+		<button 
+			type="submit" 
+			class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded font-medium"
+		>
+			Create Endpoint
+		</button>
+	</form>
+}
+
+templ endpointsList(endpoints []MockEndpoint) {
+	if len(endpoints) == 0 {
+		<div class="p-6 text-center text-gray-500">
+			No endpoints configured yet.
+		</div>
+	} else {
+		<div class="divide-y divide-gray-200">
+			for _, endpoint := range endpoints {
+				@endpointRow(endpoint)
+			}
+		</div>
+	}
+}
+
+templ endpointRow(endpoint MockEndpoint) {
+	<div class="p-6 hover:bg-gray-50">
+		<div class="flex items-center justify-between">
+			<div class="flex-1">
+				<div class="flex items-center space-x-3 mb-2">
+					<span class={ methodBadgeClass(endpoint.Method) }>
+						{ endpoint.Method }
+					</span>
+					<code class="text-lg font-mono text-gray-800">{ endpoint.Path }</code>
+				</div>
+				<div class="text-sm text-gray-600 space-y-1">
+					<div>Status: <span class="font-medium">{ fmt.Sprintf("%d", endpoint.StatusCode) }</span></div>
+					if endpoint.Delay > 0 {
+						<div>Delay: <span class="font-medium">{ fmt.Sprintf("%dms", endpoint.Delay) }</span></div>
+					}
+					if len(endpoint.ResponseHeaders) > 0 {
+						<div>Custom Headers: <span class="font-medium">{ fmt.Sprintf("%d", len(endpoint.ResponseHeaders)) }</span></div>
+					}
+				</div>
+			</div>
+			<div class="flex space-x-2">
+				<button 
+					class="text-blue-600 hover:text-blue-800 px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 text-sm"
+					onclick={ testEndpoint(endpoint.Path, endpoint.Method) }
+				>
+					Test
+				</button>
+				<button 
+					hx-delete={ fmt.Sprintf("/admin/mocks?path=%s&method=%s", endpoint.Path, endpoint.Method) }
+					hx-target="#endpoints-list"
+					hx-swap="innerHTML"
+					hx-confirm="Are you sure you want to delete this endpoint?"
+					class="text-red-600 hover:text-red-800 px-3 py-1 rounded border border-red-300 hover:bg-red-50 text-sm"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+func methodBadgeClass(method string) string {
+	switch method {
+	case "GET":
+		return "px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800"
+	case "POST":
+		return "px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800"
+	case "PUT":
+		return "px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800"
+	case "DELETE":
+		return "px-2 py-1 text-xs font-semibold rounded bg-red-100 text-red-800"
+	case "PATCH":
+		return "px-2 py-1 text-xs font-semibold rounded bg-purple-100 text-purple-800"
+	default:
+		return "px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-800"
+	}
+}
+
+script testEndpoint(path, method string) {
+	fetch(path, { method: method })
+		.then(response => response.text())
+		.then(data => {
+			alert(`Response from ${method} ${path}:\n\n${data}`);
+		})
+		.catch(error => {
+			alert(`Error testing ${method} ${path}:\n\n${error}`);
+		});
+}
