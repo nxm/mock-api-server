@@ -16,7 +16,7 @@
           version = "1.0.0";
 
           src = ./.;
-          vendorHash = "sha256-ll5+m1DYg6kMIdFHadkL3McpTIpxR68A2RxexghhO2s=";
+          vendorHash = "sha256-JlCZ5sf0+x+YoCna/a03ARoJwwvNdj1fxVGlORVyuzY=";
 
           meta = with pkgs.lib; {
             description = "Dynamic API mocking server";
