@@ -98,7 +98,11 @@ func main() {
 
 			log.Info().Interface("endpoints", endpoints).Msg("Endpoints")
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(endpoints)
+			err := json.NewEncoder(w).Encode(endpoints)
+			if err != nil {
+				log.Error().Err(err).Msg("Error encoding endpoints")
+				return
+			}
 
 		case http.MethodPost:
 			var endpoint MockEndpoint
@@ -130,9 +134,13 @@ func main() {
 
 			log.Info().Msgf("Mock endpoint added: [%s]", endpoint.Path)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]string{
+			err = json.NewEncoder(w).Encode(map[string]string{
 				"message": msg,
 			})
+			if err != nil {
+				log.Error().Err(err).Msg("Error encoding response")
+				return
+			}
 
 		case http.MethodDelete:
 			path := r.URL.Query().Get("path")
@@ -145,9 +153,13 @@ func main() {
 			if server.DeleteEndpoint(path, method) {
 				log.Info().Msgf("Mock endpoint deleted: %s", path)
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]string{
+				err := json.NewEncoder(w).Encode(map[string]string{
 					"message": fmt.Sprintf("Mock endpoint deleted: %s %s", method, path),
 				})
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to write response")
+					return
+				}
 			} else {
 				http.Error(w, "Endpoint not found", http.StatusNotFound)
 			}
@@ -182,10 +194,18 @@ func main() {
 
 		if endpoint.ResponseBody != nil {
 			if str, ok := endpoint.ResponseBody.(string); ok {
-				w.Write([]byte(str))
+				_, err := w.Write([]byte(str))
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to write response")
+					return
+				}
 			} else {
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(endpoint.ResponseBody)
+				err := json.NewEncoder(w).Encode(endpoint.ResponseBody)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to write response")
+					return
+				}
 			}
 		}
 	})
