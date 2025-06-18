@@ -120,7 +120,7 @@
                 Type = "simple";
                 User = cfg.user;
                 Group = cfg.group;
-                ExecStart = "${self.packages.${pkgs.system}.default}/bin/mock-api-server -host ${cfg.host} -port ${toString cfg.port} ${concatStringsSep " " cfg.extraArgs}";
+                ExecStart = "${self.packages.${pkgs.system}.default}/bin/mockapi -host ${cfg.host} -port ${toString cfg.port} ${concatStringsSep " " cfg.extraArgs}";
                 Restart = "on-failure";
                 RestartSec = "5s";
 
